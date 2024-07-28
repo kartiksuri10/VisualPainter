@@ -1,43 +1,60 @@
 import mediapipe as mp
 import cv2
 
-#open webcam
-cap = cv2.VideoCapture(0)
-# solutions are the submodules provided by mediapipe (Face detection, Hands Tracking etc.)
-# accessing hand tracking wala solution (solutions.hands)
-mpHands = mp.solutions.hands
+class handDetector():
+    def __init__(self, mode=False, maxHands=2, detectionCon=0.5, trackCon=0.5):
+        self.mode=mode
+        self.maxHands = maxHands
+        self.detectionCon = detectionCon
+        self.trackCon = trackCon
+        self.mpHands = mp.solutions.hands
+        #self.hands = self.mpHands.Hands(self.mode, self.maxHands, self.detectionCon, self.trackCon)
+        self.hands = self.mpHands.Hands(
+            static_image_mode=self.mode,
+            max_num_hands=self.maxHands,
+            min_detection_confidence=self.detectionCon,
+            min_tracking_confidence=self.trackCon
+        )
+        self.mpDraw = mp.solutions.drawing_utils 
 
-# instance of hand tracker
-# Hands is a class used to detect and track hands
-hands = mpHands.Hands()
-
-# reference to drawing_utils module of mediapipe
-mpDraw = mp.solutions.drawing_utils # this gives us power to draw points or connect them
-
-
-while True:
-    success, img = cap.read()
-    img = cv2.flip(img, 1)
-    #convert BGR captured image to RGb
-    imgRGB = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    def findHands(self, img, draw=True):
+        img = cv2.flip(img, 1)
+        imgRGB = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        self.results = self.hands.process(imgRGB)
+        if self.results.multi_hand_landmarks:
+            for handLms in self.results.multi_hand_landmarks:
+                if draw:
+                    self.mpDraw.draw_landmarks(img, handLms, self.mpHands.HAND_CONNECTIONS)
+        return img
     
-    #process rbg image which returns landmarks where hand is found if not found then None
-    results = hands.process(imgRGB)
+
+    def findPositions(self, img, handNo=0, draw=True):
+        lmList=[]
+        if self.results.multi_hand_landmarks:
+            selectedHand = self.results.multi_hand_landmarks[handNo]
+            for id, lm in enumerate(selectedHand.landmark):
+                # print(id, lm)
+                h, w, c = img.shape
+                cx, cy = int(lm.x*w), int(lm.y*h)
+                lmList.append([id, cx, cy])
+                if draw and id==8:
+                    cv2.circle(img, (cx,cy), 15, (255,0,255), cv2.FILLED)
+
+        return lmList
+
+def main(): 
+    cap = cv2.VideoCapture(0)  
+    obj = handDetector()
     
-    # print(results.multi_hand_landmarks)
+    while True:
+        success, img = cap.read()
+        img=obj.findHands(img)
 
-    if results.multi_hand_landmarks:
-        # two hands in one frame might be possible so draw for each hand
-        for handLms in results.multi_hand_landmarks:
-            # draw points (landmarks) as well as connections
-            mpDraw.draw_landmarks(img, handLms, mpHands.HAND_CONNECTIONS)
-    cv2.imshow('Image',img)
-    cv2.waitKey(1)
+        lmList = obj.findPositions(img)
+        print(lmList)
 
+        cv2.imshow('Image',img)
+        cv2.waitKey(1)
 
-cap.release()
-cv2.destroyAllWindows()
-
-
-
-
+if __name__ == "__main__":
+    main()
