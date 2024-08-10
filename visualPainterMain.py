@@ -2,10 +2,70 @@ import numpy as np
 import cv2
 import os
 import HandsTrackingModule as htm
+from scipy.spatial import distance
 ##################
 brushThickness = 15
 eraserThickness = 100
 ##################
+def recognize_shape(points):
+    # Analyze the points and recognize the shape
+    if len(points) < 5:
+        return "line"
+
+    # Find bounding box
+    x_coords = [p[0] for p in points]
+    y_coords = [p[1] for p in points]
+    bbox = (min(x_coords), min(y_coords), max(x_coords), max(y_coords))
+
+    # Check if it is a rectangle
+    if is_rectangle(points, bbox):
+        return "rectangle"
+    elif is_circle(points, bbox):
+        return "circle"
+    return "unknown"
+
+def draw_shape(canvas, points, shape, color, thickness):
+    if shape == "line":
+        cv2.line(canvas, points[0], points[-1], color, thickness)
+    elif shape == "rectangle":
+        x_coords = [p[0] for p in points]
+        y_coords = [p[1] for p in points]
+        cv2.rectangle(canvas, (min(x_coords), min(y_coords)), (max(x_coords), max(y_coords)), color, thickness)
+    elif shape == "circle":
+        x_coords = [p[0] for p in points]
+        y_coords = [p[1] for p in points]
+        center = (sum(x_coords) // len(x_coords), sum(y_coords) // len(y_coords))
+        radius = int(np.mean([distance.euclidean(center, p) for p in points]))
+        cv2.circle(canvas, center, radius, color, thickness)
+def is_rectangle(points, bbox):
+    x_min, y_min, x_max, y_max = bbox
+    threshold = 15  # Allowable distance from the bounding box
+
+    # Check how many points are near the bounding box edges
+    near_edges = 0
+    for (x, y) in points:
+        if (abs(x - x_min) < threshold or abs(x - x_max) < threshold or
+            abs(y - y_min) < threshold or abs(y - y_max) < threshold):
+            near_edges += 1
+
+    # Consider it a rectangle if most points are near the edges
+    if near_edges > 0.9 * len(points):
+        return True
+    return False
+def is_circle(points, bbox):
+    x_min, y_min, x_max, y_max = bbox
+    center = ((x_min+x_max)//2,(y_min+y_max)//2)
+    distances = [distance.euclidean(center, (x, y)) for x, y in points]
+    mean_radius = np.mean(distances)
+    radius_threshold = 15  # Allowable variation in radius
+
+    for dist in distances:
+        if abs(dist - mean_radius) > radius_threshold:
+            return False
+    return True
+
+##################
+
 
 folderPath = r"D:\VisualPainter\Header"
 images = os.listdir(folderPath)
@@ -24,9 +84,15 @@ cap = cv2.VideoCapture(0)
 cap.set(3, 1280)
 cap.set(4, 720)
 xp, yp = 0, 0
-detector = htm.handDetector(detectionCon=1)
+detector = htm.handDetector(detectionCon=0.85)
+
+# window resizeable
 cv2.namedWindow('Image', cv2.WINDOW_NORMAL)
 cv2.namedWindow('Canvas', cv2.WINDOW_NORMAL)
+
+# Store points for shape recognition
+points = []
+
 while True:
     success, img = cap.read()
     if success:
@@ -59,8 +125,13 @@ while True:
                     elif 1100<x1<1280:
                         header = imageList[3]
                         drawColor = (0,0,0)
+                # Recognize shape
+                if len(points) > 10:  # Minimum points for a shape
+                    recognized_shape = recognize_shape(points)
+                    draw_shape(imgCanvas, points, recognized_shape, drawColor, brushThickness)
+                points = []  # Clear points after recognizing shape
                 cv2.rectangle(img, (x1,y1-25), (x2,y2+25), drawColor, cv2.FILLED)
-
+            
             # drawing mode if index finger is up only
             if fingers[1] and fingers[2]==False:
                 cv2.circle(img, (x1,y1), 15, drawColor, cv2.FILLED)
@@ -74,23 +145,23 @@ while True:
                 else:
                     cv2.line(img, (xp, yp), (x1, y1), drawColor, brushThickness)
                     cv2.line(imgCanvas, (xp, yp), (x1, y1), drawColor, brushThickness)
-
+                points.append((x1, y1))
                 xp, yp = x1, y1
 
         imgGray = cv2.cvtColor(imgCanvas, cv2.COLOR_BGR2GRAY)
         _, imgInv = cv2.threshold(imgGray, 50, 255, cv2.THRESH_BINARY_INV)
         imgInv = cv2.cvtColor(imgInv, cv2.COLOR_GRAY2BGR)
-
         img = cv2.bitwise_and(img, imgInv)
         img = cv2.bitwise_or(img, imgCanvas)
 
         img[0:125, 0:1280] = header
         cv2.imshow('Image', img)
-        # cv2.imshow('Canvas', imgCanvas)
+    
+        if cv2.waitKey(1) & 0xFF == ord('q'):  # Press 'q' to exit the loop
+            break
     else:
         break
-    if cv2.waitKey(1) & 0xFF == ord('q'):  # Press 'q' to exit the loop
-        break
+    
 
 cap.release()
 cv2.destroyAllWindows()
