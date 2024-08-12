@@ -55,7 +55,7 @@ def draw_shape(canvas, points, shape, color, thickness, bbox):
 
 def is_rectangle(points, bbox):
     x_min, y_min, x_max, y_max = bbox
-    threshold = 10  # Allowable distance from the bounding box
+    threshold = 15  # Allowable distance from the bounding box
 
     # Check how many points are near the bounding box edges
     near_edges = 0
@@ -65,7 +65,7 @@ def is_rectangle(points, bbox):
             near_edges += 1
 
     # Consider it a rectangle if most points are near the edges
-    if near_edges > 0.90 * len(points):
+    if near_edges > 0.85 * len(points):
         return True
     return False
 def is_circle(points, bbox):
@@ -87,7 +87,7 @@ def is_triangle(points, bbox):
     pts = pts.reshape((-1, 1, 2))
     
     # Approximate the contour to a polygon
-    epsilon = 0.02 * cv2.arcLength(pts, True)
+    epsilon = 0.05 * cv2.arcLength(pts, True)
     approx = cv2.approxPolyDP(pts, epsilon, True)
     
     # Check if the approximation has 3 vertices (triangle)
